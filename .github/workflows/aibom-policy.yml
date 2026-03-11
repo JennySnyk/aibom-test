@@ -11,6 +11,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
 jobs:
   aibom-policy:
     name: Generate AIBOM & Enforce Policies
@@ -22,17 +25,13 @@ jobs:
       - name: Set up Snyk CLI
         uses: snyk/actions/setup@master
 
-      - name: Authenticate Snyk
-        run: snyk auth ${{ secrets.SNYK_TOKEN }}
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Verify Snyk auth
+        run: snyk whoami
 
       # -----------------------------------------------------------------------
       # Generate AIBOM (JSON)
       # -----------------------------------------------------------------------
       - name: Generate AIBOM (JSON)
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           snyk aibom --experimental \
             --json-file-output=aibom.json
@@ -41,8 +40,6 @@ jobs:
       # Generate AIBOM (HTML visualization)
       # -----------------------------------------------------------------------
       - name: Generate AIBOM (HTML)
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           snyk aibom --experimental --html > aibom.html
 
