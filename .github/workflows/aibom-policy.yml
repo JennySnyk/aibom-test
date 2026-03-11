@@ -25,8 +25,8 @@ jobs:
       - name: Set up Snyk CLI
         uses: snyk/actions/setup@master
 
-      - name: Verify Snyk auth
-        run: snyk whoami
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
       # -----------------------------------------------------------------------
       # Generate AIBOM (JSON)
