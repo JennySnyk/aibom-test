@@ -1,0 +1,105 @@
+# =============================================================================
+# AIBOM Policy Enforcement Pipeline
+# Generates an AI Bill of Materials and enforces model/license policies
+# =============================================================================
+name: AIBOM Policy Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  aibom-policy:
+    name: Generate AIBOM & Enforce Policies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Snyk CLI
+        uses: snyk/actions/setup@master
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # Generate AIBOM (JSON)
+      # -----------------------------------------------------------------------
+      - name: Generate AIBOM (JSON)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk aibom --experimental \
+            --json-file-output=aibom.json
+
+      # -----------------------------------------------------------------------
+      # Generate AIBOM (HTML visualization)
+      # -----------------------------------------------------------------------
+      - name: Generate AIBOM (HTML)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk aibom --experimental --html > aibom.html
+
+      # -----------------------------------------------------------------------
+      # Policy 1 – Block models from Hugging Face (expected to FAIL)
+      # -----------------------------------------------------------------------
+      - name: "Policy: Block Hugging Face models"
+        run: |
+          echo "Checking for Hugging Face models..."
+          cat aibom.json | jq '
+            [
+              .components[]
+              | select(.type == "machine-learning-model")
+              | select(.publisher == "Hugging Face Inc")
+            ]
+            | if length > 0
+              then (., error("Hugging Face policy violation"))
+              else empty
+              end
+          '
+
+      # -----------------------------------------------------------------------
+      # Policy 2 – Block strong copyleft licenses (expected to PASS)
+      # -----------------------------------------------------------------------
+      - name: "Policy: Block strong copyleft licenses (GPL/OSL)"
+        run: |
+          echo "Checking for copyleft-licensed models..."
+          cat aibom.json | jq '
+            [
+              .components[]
+              | select(.type == "machine-learning-model")
+              | select(
+                  any(.licenses[]?.license?.id;
+                      type == "string" and test("^GPL|OSL"))
+                )
+            ]
+            | if length > 0
+              then (., error("License policy violation"))
+              else empty
+              end
+          '
+
+      # -----------------------------------------------------------------------
+      # Upload AIBOM artifacts (always runs, even if policies fail)
+      # -----------------------------------------------------------------------
+      - name: Upload AIBOM JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aibom-json
+          path: aibom.json
+          retention-days: 90
+
+      - name: Upload AIBOM HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aibom-html
+          path: aibom.html
+          retention-days: 90
