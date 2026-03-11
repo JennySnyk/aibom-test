@@ -48,39 +48,80 @@ jobs:
       # -----------------------------------------------------------------------
       - name: "Policy: Block Hugging Face models"
         run: |
-          echo "Checking for Hugging Face models..."
-          cat aibom.json | jq '
-            [
-              .components[]
-              | select(.type == "machine-learning-model")
-              | select(.publisher == "Hugging Face Inc")
-            ]
-            | if length > 0
-              then (., error("Hugging Face policy violation"))
-              else empty
-              end
-          '
+          echo "=============================================="
+          echo "  AIBOM POLICY CHECK: Hugging Face Models"
+          echo "=============================================="
+          echo ""
+
+          VIOLATIONS=$(cat aibom.json | jq '[.components[] | select(.type == "machine-learning-model") | select(.publisher == "Hugging Face Inc")]')
+          COUNT=$(echo "$VIOLATIONS" | jq 'length')
+
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error::PIPELINE BLOCKED: Disallowed AI components detected."
+            echo ""
+            echo "  $COUNT Hugging Face model(s) found in the AI supply chain."
+            echo "  Per organizational policy, models from Hugging Face Inc are"
+            echo "  not approved for use in this project."
+            echo ""
+            echo "  Blocked models:"
+            echo "$VIOLATIONS" | jq -r '.[] | "    - \(.name) (v\(.version // "n/a"))"'
+            echo ""
+            echo "  Action required:"
+            echo "    1. Remove or replace the disallowed model(s) listed above."
+            echo "    2. Use an approved model provider instead."
+            echo "    3. Or request a policy exception from the security team."
+            echo ""
+            echo "=============================================="
+            echo "  RESULT: FAILED — Pipeline blocked"
+            echo "=============================================="
+            exit 1
+          else
+            echo "  No Hugging Face models detected. Policy check passed."
+            echo ""
+            echo "=============================================="
+            echo "  RESULT: PASSED"
+            echo "=============================================="
+          fi
 
       # -----------------------------------------------------------------------
       # Policy 2 – Block strong copyleft licenses (expected to PASS)
       # -----------------------------------------------------------------------
       - name: "Policy: Block strong copyleft licenses (GPL/OSL)"
         run: |
-          echo "Checking for copyleft-licensed models..."
-          cat aibom.json | jq '
-            [
-              .components[]
-              | select(.type == "machine-learning-model")
-              | select(
-                  any(.licenses[]?.license?.id;
-                      type == "string" and test("^GPL|OSL"))
-                )
-            ]
-            | if length > 0
-              then (., error("License policy violation"))
-              else empty
-              end
-          '
+          echo "=============================================="
+          echo "  AIBOM POLICY CHECK: Copyleft Licenses"
+          echo "=============================================="
+          echo ""
+
+          VIOLATIONS=$(cat aibom.json | jq '[.components[] | select(.type == "machine-learning-model") | select(any(.licenses[]?.license?.id; type == "string" and test("^GPL|OSL")))]')
+          COUNT=$(echo "$VIOLATIONS" | jq 'length')
+
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error::PIPELINE BLOCKED: Disallowed AI components detected."
+            echo ""
+            echo "  $COUNT model(s) with strong copyleft licenses (GPL/OSL) found."
+            echo "  Per organizational policy, models under GPL or OSL licenses"
+            echo "  are not approved for use in this project."
+            echo ""
+            echo "  Blocked models:"
+            echo "$VIOLATIONS" | jq -r '.[] | "    - \(.name) — license: \(.licenses[0]?.license?.id // "unknown")"'
+            echo ""
+            echo "  Action required:"
+            echo "    1. Remove or replace the disallowed model(s) listed above."
+            echo "    2. Use a model with a permissive license (MIT, Apache-2.0, etc.)."
+            echo "    3. Or request a policy exception from the legal team."
+            echo ""
+            echo "=============================================="
+            echo "  RESULT: FAILED — Pipeline blocked"
+            echo "=============================================="
+            exit 1
+          else
+            echo "  No models with copyleft licenses detected. Policy check passed."
+            echo ""
+            echo "=============================================="
+            echo "  RESULT: PASSED"
+            echo "=============================================="
+          fi
 
       # -----------------------------------------------------------------------
       # Upload AIBOM artifacts (always runs, even if policies fail)
